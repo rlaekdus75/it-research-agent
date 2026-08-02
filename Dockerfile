@@ -46,6 +46,10 @@ WORKDIR /app
 
 # ---- 파이썬 의존성 설치 (코드보다 먼저 복사해서 캐시 활용) ----
 COPY requirements.txt .
+# GPU가 없는 컨테이너라 CUDA 포함 torch(nvidia-*-cu12 등)는 불필요하게 이미지 용량만 키운다.
+# sentence-transformers가 요구하는 torch를 CPU 전용 빌드로 먼저 깔아서, 이후 설치 단계에서
+# 이미 만족된 의존성으로 인식해 CUDA 버전으로 덮어쓰지 않도록 한다.
+RUN pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ---- 애플리케이션 코드 + 데이터 복사 ----
