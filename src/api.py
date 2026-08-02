@@ -1,6 +1,5 @@
 """
 [src/api.py]
-
 agent.py의 Agent를 FastAPI로 감싸서 REST API + 웹 채팅 UI로 배포한다.
 실행: python3 src/api.py (저장소 루트에서)
 채팅 UI: http://localhost:8003
@@ -8,13 +7,11 @@ Swagger: http://localhost:8003/docs
 """
 import os
 from typing import Optional
-
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
-
 from agent import graph
 
 app = FastAPI(title="rain-research-bot")
@@ -58,6 +55,12 @@ def ask(request: AskRequest):
             tool_used = msg.tool_calls[0]["name"]
 
     answer = result["messages"][-1].content
+    if isinstance(answer, list):
+        answer = "".join(
+            block.get("text", "")
+            for block in answer
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
     if not answer:
         raise HTTPException(status_code=500, detail="답변 생성에 실패했습니다.")
 
