@@ -410,7 +410,7 @@
     <div class="chat-area" id="chatArea">
         <div class="welcome" id="welcome">
             <div class="welcome-visual">R</div>
-            <h2>무엇이든 물어보세요ㅁ너이ㅓㅇㅁ나ㅣㅇㄴ마ㅓㅣㅇㄴㅁ</h2>
+            <h2>무엇이든 물어보세요</h2>
 
             <div class="capability-row">
                 <div class="capability wiki">
@@ -455,7 +455,11 @@
         const questionInput = document.getElementById('questionInput');
         const sendBtn = document.getElementById('sendBtn');
         const welcome = document.getElementById('welcome');
-        const threadId = 'session-' + Date.now();
+        let threadId = localStorage.getItem('rain_thread_id');
+        if (!threadId) {
+            threadId = 'session-' + Date.now();
+            localStorage.setItem('rain_thread_id', threadId);
+        }
 
         function sendExample(text) {
             questionInput.value = text;
