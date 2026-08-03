@@ -83,7 +83,7 @@ def evaluate_quality():
         print(f"\n[질문] {question}")
         print(f"  {scores}")
 
-        quality_results.append({"question": question, "answer": answer, "scores": scores})
+        quality_results.append({"question": question, "context": context, "answer": answer, "scores": scores})
 
     return quality_results
 

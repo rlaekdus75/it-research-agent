@@ -14,7 +14,9 @@ from naver_news_tool import search_news
 _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 _FAISS_PATH = os.path.join(_DATA_DIR, "faiss_index_it")
 
-_it_retriever = load_hybrid_retriever(_FAISS_PATH)
+# 평가용: USE_RERANKER=false 로 실행하면 리랭킹 없이(v1 baseline) 동작
+_USE_RERANKER = os.getenv("USE_RERANKER", "true").lower() != "false"
+_it_retriever = load_hybrid_retriever(_FAISS_PATH, use_reranker=_USE_RERANKER)
 
 
 @tool
