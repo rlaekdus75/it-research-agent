@@ -1,8 +1,7 @@
 # API 키 등 민감 정보 - 절대 커밋 금지
 .env
 
-# FAISS 인덱스 (용량 크고, build_index.py로 재생성 가능)
-faiss_index_it/
+
 
 # 참고: it_wiki_docs.json / it_wiki_docs_clean.json은 용량이 작아 커밋에 포함함
 # (clone 받았을 때 collect_wiki.py 재실행 없이 build_index.py만 돌리면 되도록)
