@@ -53,6 +53,8 @@ def ask(request: AskRequest):
     for msg in result["messages"]:
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             tool_used = msg.tool_calls[0]["name"]
+        elif getattr(msg, "type", None) == "human":
+            tool_used = None
 
     answer = result["messages"][-1].content
     if isinstance(answer, list):
