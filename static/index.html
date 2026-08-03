@@ -6,6 +6,8 @@
     <title>rain-research-bot</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -85,6 +87,7 @@
             font-size: 14.5px;
             line-height: 1.55;
             font-weight: 400;
+            white-space: pre-wrap;
         }
 
         .message.bot .header-row {
@@ -142,11 +145,84 @@
             font-size: 14.5px;
             line-height: 1.8;
             color: #374151;
-            white-space: pre-wrap;
             font-weight: 300;
             margin-left: 36px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.03);
         }
+
+        /* ----- 마크다운 렌더링 결과 스타일 ----- */
+        .message.bot .bubble > *:first-child { margin-top: 0; }
+        .message.bot .bubble > *:last-child { margin-bottom: 0; }
+
+        .message.bot .bubble p {
+            margin: 0 0 10px;
+        }
+
+        .message.bot .bubble ul,
+        .message.bot .bubble ol {
+            margin: 0 0 10px;
+            padding-left: 20px;
+        }
+
+        .message.bot .bubble li {
+            margin-bottom: 4px;
+        }
+
+        .message.bot .bubble li > p {
+            margin-bottom: 4px;
+        }
+
+        .message.bot .bubble strong {
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+
+        .message.bot .bubble h1,
+        .message.bot .bubble h2,
+        .message.bot .bubble h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1a1a2e;
+            margin: 14px 0 8px;
+        }
+
+        .message.bot .bubble a {
+            color: #0ea5e9;
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: bottom;
+        }
+
+        .message.bot .bubble a:hover {
+            text-decoration: none;
+        }
+
+        .message.bot .bubble code {
+            background: #f4f4f5;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 13px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: #0f766e;
+        }
+
+        .message.bot .bubble pre {
+            background: #f4f4f5;
+            border-radius: 10px;
+            padding: 12px 14px;
+            overflow-x: auto;
+            margin: 0 0 10px;
+        }
+
+        .message.bot .bubble pre code {
+            background: none;
+            padding: 0;
+            color: #374151;
+        }
+        /* ----- 마크다운 스타일 끝 ----- */
 
         .loading-wrap {
             margin-left: 36px;
@@ -451,6 +527,8 @@
     </div>
 
     <script>
+        // 단순 줄바꿈도 화면에서 줄바꿈으로 보이게 한다
+        marked.setOptions({ breaks: true });
         const chatArea = document.getElementById('chatArea');
         const questionInput = document.getElementById('questionInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -506,7 +584,12 @@
                 }
                 div.innerHTML =
                     '<div class="header-row"><div class="bot-icon">R</div><span class="bot-name">rain</span>' + chip + '</div>' +
-                    '<div class="bubble">' + esc(text) + '</div>';
+                    '<div class="bubble">' + DOMPurify.sanitize(marked.parse(text)) + '</div>';
+                // 답변 안의 링크는 새 탭에서 열리게 한다 (대화 화면을 벗어나지 않도록)
+                div.querySelectorAll('.bubble a').forEach(function (a) {
+                    a.setAttribute('target', '_blank');
+                    a.setAttribute('rel', 'noopener noreferrer');
+                });
             }
             chatArea.appendChild(div);
             chatArea.scrollTop = chatArea.scrollHeight;
