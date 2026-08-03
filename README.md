@@ -632,7 +632,7 @@ v1 평가에서 드러난 검색 단계 문제를 잡으려고 Cross-encoder 리
 </details>
 
 <details>
-<summary><h2>회고 (8/2 ~ 8/3)</h2></summary>
+<summary><h2>회고 ( ~ 8/3)</h2></summary>
 
 ### 진행 순서
 
