@@ -36,4 +36,7 @@ def search_realtime_news(query: str) -> str:
     results = search_news(query)
     if not results:
         return "관련 뉴스를 찾지 못했습니다."
-    return "\n\n".join(f"[{r['title']}] {r['description']}" for r in results)
+    return "\n\n".join(
+        f"제목: {r['title']}\n요약: {r['description']}\n링크: {r['link']}"
+        for r in results
+    )
