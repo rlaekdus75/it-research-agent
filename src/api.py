@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from agent import graph
 
 app = FastAPI(title="rain-research-bot")
@@ -28,7 +28,9 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     tool_used: Optional[str] = None
-
+    tool_query: Optional[str] = None
+    trace: list[str] = []
+    contexts: list[str] = []
 
 @app.get("/")
 def serve_ui():
@@ -50,11 +52,21 @@ def ask(request: AskRequest):
     result = graph.invoke({"messages": [HumanMessage(content=request.question)]}, config=config)
 
     tool_used = None
+    tool_query = None
+    trace = []
+    contexts = []
     for msg in result["messages"]:
+        # 사용자 질문을 만나면 초기화 (이번 질문 이후의 기록만 남긴다)
+        if getattr(msg, "type", None) == "human":
+            tool_used, tool_query, trace, contexts = None, None, [], []
+            continue
         if hasattr(msg, "tool_calls") and msg.tool_calls:
+            for call in msg.tool_calls:
+                trace.append(call["name"])
             tool_used = msg.tool_calls[0]["name"]
-        elif getattr(msg, "type", None) == "human":
-            tool_used = None
+            tool_query = msg.tool_calls[0].get("args", {}).get("query")
+        if isinstance(msg, ToolMessage):
+            contexts.append(msg.content)
 
     answer = result["messages"][-1].content
     if isinstance(answer, list):
@@ -66,7 +78,13 @@ def ask(request: AskRequest):
     if not answer:
         raise HTTPException(status_code=500, detail="답변 생성에 실패했습니다.")
 
-    return AskResponse(answer=answer, tool_used=tool_used)
+    return AskResponse(
+        answer=answer,
+        tool_used=tool_used,
+        tool_query=tool_query,
+        trace=trace,
+        contexts=contexts,
+    )
 
 
 if __name__ == "__main__":
