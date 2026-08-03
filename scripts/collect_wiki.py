@@ -19,6 +19,16 @@ SEED_TERMS = [
     "정보 보안", "암호화", "해킹", "방화벽",
     "블록체인", "사물인터넷", "가상 현실", "5G", "반도체",
     "스타트업", "전자 상거래",
+    # --- AI/LLM 계열 (3번 개선: 최신 AI 개발 용어 커버리지 확대) ---
+    "랭체인", "대형 언어 모델", "생성형 인공지능", "챗GPT", "오픈AI",
+    "트랜스포머 (기계 학습)", "인공 신경망", "강화 학습", "컴퓨터 비전",
+    "워드 임베딩", "벡터 공간 모델", "정보 검색", "추천 시스템",
+    "프롬프트 엔지니어링", "파운데이션 모델", "허깅 페이스",
+
+    # --- 개발 도구/인프라 계열 ---
+    "파이썬", "자바스크립트", "깃 (소프트웨어)", "깃허브", "도커 (소프트웨어)",
+    "쿠버네티스", "마이크로서비스", "데브옵스", "리눅스", "리액트 (자바스크립트 라이브러리)",
+    "REST", "지속적 통합", "가상 머신",
 ]
 
 MAX_LINKS_PER_PAGE = 15
@@ -45,14 +55,28 @@ def is_valid_title(title: str) -> bool:
 
 
 def fetch_page(title: str):
-    page = wiki.page(title)
-    time.sleep(0.1)
-    if not page.exists():
-        return None
-    if len(page.text) < MIN_TEXT_LENGTH:
-        return None
-    return page
+    """위키 문서 1개 가져오기. 일시적 오류는 최대 3번까지 재시도."""
+    for attempt in range(3):
+        try:
+            page = wiki.page(title)
+            if not page.exists():
+                return None
+            if len(page.text) < MIN_TEXT_LENGTH:
+                return None
+            time.sleep(0.3)
+            return page
+        except Exception as e:
+            print(f"  [재시도 {attempt + 1}/3] {title} - {type(e).__name__}")
+            time.sleep(5)
+    print(f"  [포기] {title} (3회 시도 실패)")
+    return None
 
+def save_docs(collected: dict):
+    """지금까지 모은 문서를 파일에 저장 (중간 저장용)"""
+    docs = [{"title": t, "text": x} for t, x in collected.items()]
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        json.dump(docs, f, ensure_ascii=False, indent=2)
+    return len(docs)
 
 def main():
     os.makedirs(_DATA_DIR, exist_ok=True)  # data/ 폴더 없으면 생성
@@ -72,6 +96,9 @@ def main():
         seed_pages.append(page)
         print(f"  [수집] {page.title} ({len(page.text)}자)")
 
+        save_docs(collected)
+    print(f"\n[중간 저장] 시드 수집분 {len(collected)}개 저장 완료")
+
     print(f"\n링크 확장 수집 시작 (문서당 최대 {MAX_LINKS_PER_PAGE}개)...")
     for page in seed_pages:
         links = [t for t in page.links.keys() if is_valid_title(t)]
@@ -82,7 +109,8 @@ def main():
             if linked is None:
                 continue
             collected[linked.title] = linked.text
-        print(f"  [확장 완료] {page.title} -> 누적 {len(collected)}개")
+        save_docs(collected)
+        print(f"  [확장 완료] {page.title} -> 누적 {len(collected)}개 (저장됨)")
 
     docs = [{"title": t, "text": x} for t, x in collected.items()]
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
