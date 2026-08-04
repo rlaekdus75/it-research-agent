@@ -36,3 +36,4 @@ jobs:
             cd ~
             sudo docker compose -f docker-compose-ec2.yml pull
             sudo docker compose -f docker-compose-ec2.yml up -d
+            sudo docker image prune -af
