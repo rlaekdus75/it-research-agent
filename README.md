@@ -1,8 +1,9 @@
-# rain-research-bot
+# it-research-agent
 
 > IT 개념 질문과 최신 시사·기업 뉴스를 구분해서, 알맞은 도구로 조사해 답하는 LangGraph 기반 리서치 에이전트
 
-`Python` `LangChain` `LangGraph` `FastAPI` `Docker` `AWS EC2` `GitHub Actions`
+`Python` `LangChain` `LangGraph` `FastAPI` `Docker` `AWS EC2` `GitHub Actions` `uv`
+
 
 ---
 
@@ -56,8 +57,9 @@
 - **검색 실패 시 폴백**: IT·기술 질문인데 위키 인덱스에 문서가 없으면 자동으로 뉴스 검색으로 넘어가고, 그 사실을 답변에 명시
 - **Agent 라우팅**: 두 도구 중 무엇을 쓸지 사람이 규칙을 짜지 않고, LLM이 tool-calling으로 스스로 판단
 - **대화 기억**: 같은 세션(thread) 안에서는 이전 질문을 기억하고 이어서 답변. 새로고침해도 유지
+- **응답 추적 정보**: 답변과 함께 사용된 도구, 도구에 넘어간 검색어, 도구 호출 순서, 검색된 컨텍스트 원문을 반환
 - **웹 채팅 UI**: 마크다운 렌더링, 클릭 가능한 기사 링크, 사용된 도구 표시
-- **배포 자동화**: Docker 이미지 빌드 → Docker Hub push → EC2 재기동까지 GitHub Actions로 자동화
+- **배포 자동화**: Docker 이미지 빌드 → Docker Hub push → EC2 재기동 → 미사용 이미지 정리까지 GitHub Actions로 자동화
 
 ---
 
@@ -158,7 +160,7 @@ flowchart TD
 1. agent 노드가 배경지식 질문으로 판단하고 `search_it_wiki` 호출을 요청
 2. tools 노드가 하이브리드 검색 + 리랭킹을 실행해 상위 3개 청크 반환
 3. agent 노드가 검색 결과에 근거해 답변을 작성하고 종료
-4. 답변과 사용된 도구(`tool_used`)를 함께 반환
+4. 답변과 추적 정보(`tool_used`, `tool_query`, `trace`, `contexts`)를 함께 반환
 
 **실시간 시사 질문** — "오늘 삼성전자 관련 뉴스 알려줘"
 
@@ -192,15 +194,16 @@ flowchart TD
 | 생성 LLM | Gemini 2.5 Flash | 라우팅 판단, 답변 생성, 평가 채점 모두 동일 모델 |
 | 배포 | FastAPI + Uvicorn, Docker, AWS EC2 | REST API + 정적 채팅 UI를 한 컨테이너로 배포 |
 | CI/CD | GitHub Actions | main 브랜치 push 시 빌드·배포 자동 실행 |
+| 패키지 관리 | uv (`pyproject.toml` + `uv.lock`) | 잠금 파일로 로컬·Docker 의존성 버전을 동일하게 고정 |
 
 ---
 
 ## 프로젝트 구조
 
 ```
-rain-research-bot/
+it-research-agent/
 ├── .github/workflows/
-│   └── deploy.yml              # push -> Docker Hub -> EC2 자동 배포
+│   └── deploy.yml              # push -> Docker Hub -> EC2 자동 배포 (이미지 정리 포함)
 ├── src/
 │   ├── llm.py                  # LLM 빌더
 │   ├── retriever.py            # 하이브리드 검색 + 리랭킹 (플래그로 on/off)
@@ -226,9 +229,13 @@ rain-research-bot/
 ├── tests/
 │   └── test_search.py
 ├── Dockerfile
+├── .dockerignore
 ├── docker-compose.yml
 ├── docker-compose-ec2.yml
-└── requirements.txt
+├── .env.example
+├── .python-version             # Python 3.11 고정
+├── pyproject.toml              # 의존성 정의 (CPU 전용 torch 인덱스 포함)
+└── uv.lock                     # 의존성 버전 잠금
 ```
 
 ---
@@ -237,11 +244,23 @@ rain-research-bot/
 
 ### 로컬 실행
 
+의존성은 uv로 관리한다. uv가 없다면 먼저 설치한다.
+
 ```bash
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-저장소 루트에 `.env` 파일을 만들고 아래 값을 채운다.
+저장소 루트에서 아래를 실행하면 `.python-version`에 지정된 Python 3.11과 `uv.lock`에 고정된 패키지가 `.venv/`에 설치된다.
+
+```bash
+uv sync
+```
+
+`.env.example`을 복사해 `.env`를 만들고 값을 채운다.
+
+```bash
+cp .env.example .env
+```
 
 ```
 GOOGLE_API_KEY=발급받은_Gemini_API_키
@@ -252,15 +271,15 @@ NAVER_CLIENT_SECRET=발급받은_네이버_Client_Secret
 인덱스를 처음 만드는 경우에만 아래 3개를 순서대로 실행한다.
 
 ```bash
-python3 scripts/collect_wiki.py
-python3 scripts/clean_wiki_docs.py
-python3 scripts/build_index.py
+uv run python scripts/collect_wiki.py
+uv run python scripts/clean_wiki_docs.py
+uv run python scripts/build_index.py
 ```
 
 서버 실행 후 `http://localhost:8003`에서 채팅 UI, `http://localhost:8003/docs`에서 Swagger를 쓸 수 있다.
 
 ```bash
-python3 src/api.py
+uv run python src/api.py
 ```
 
 ### Docker 실행
@@ -273,15 +292,19 @@ docker compose up -d
 
 ```bash
 # 리랭킹 적용 상태
-python3 evaluation/run_evaluation.py
+uv run python evaluation/run_evaluation.py
 
 # 리랭킹 없이 (baseline 비교용)
-USE_RERANKER=false python3 evaluation/run_evaluation.py
+USE_RERANKER=false uv run python evaluation/run_evaluation.py
 ```
 
 ---
 
 ## 데모
+
+배포된 서비스: http://52.79.205.142:8003
+
+**IT 개념 질문 — 위키 인덱스 검색**
 
 ```
 POST /ask
@@ -290,9 +313,14 @@ POST /ask
 {
   "answer": "인공지능은 방대한 데이터를 학습하여 인간의 인지 기능을 모방하고
              다양한 문제를 해결하는 기술입니다. ...",
-  "tool_used": "search_it_wiki"
+  "tool_used": "search_it_wiki",
+  "tool_query": "인공지능",
+  "trace": ["search_it_wiki"],
+  "contexts": ["인공지능 | 인공지능은 인간의 학습 능력, 추론 능력 ..."]
 }
 ```
+
+**위키에 없는 용어 — 뉴스로 폴백**
 
 ```
 POST /ask
@@ -301,9 +329,14 @@ POST /ask
 {
   "answer": "위키 문서에는 없어 최신 뉴스에서 찾은 내용입니다.
              RAG는 '검색 증강 생성(Retrieval-Augmented Generation)'의 약자로 ...",
-  "tool_used": "search_realtime_news"
+  "tool_used": "search_it_wiki",
+  "tool_query": "RAG",
+  "trace": ["search_it_wiki", "search_realtime_news"],
+  "contexts": ["관련 문서를 찾지 못했습니다.", "제목: ... 요약: ... 링크: ..."]
 }
 ```
+
+`trace`는 이번 질문에서 호출된 도구를 순서대로 담는다. 위 예시처럼 위키 검색이 먼저 실패하고 뉴스 검색으로 넘어간 경우, 폴백이 실제로 일어났는지를 응답만 보고 확인할 수 있다. `contexts`는 도구가 반환한 원문이라, 답변이 근거에 맞는지 따로 대조할 수 있다.
 
 ---
 
@@ -349,13 +382,18 @@ POST /ask
 **개선 방향.** 평가 문항을 3개에서 10~20개로 늘리는 것이 반복 측정보다 우선이다. 반복은 편차를 줄이지만 표본이 작다는 문제 자체는 해결하지 못한다.
 
 ---
+
 ## 한계
 
 **평가 표본 부족** — 답변 품질 평가는 IT 개념 질문 3개로만 측정했다. 한 문항의 점수가 0.5 움직이면 평균이 0.17 움직이므로, 지표 하나하나를 성능 수치로 읽기 어렵다.
 
+**뉴스 경로 품질 미측정** — 품질 평가 3문항이 전부 위키 질문이라, 뉴스 답변의 요약 형식·링크 표시·폴백 경로가 실제로 개선됐는지는 숫자로 확인된 적이 없다. 뉴스는 정답이 매일 바뀌어 기대 답변을 고정할 수 없어, 별도의 채점 기준 설계가 필요하다.
+
 **실행 간 편차** — 리랭킹을 끈 조건을 두 번 측정했을 때 `context_precision`이 0.33과 0.60으로 갈렸다. 답변 생성과 채점을 모두 LLM이 하기 때문에 실행마다 결과가 달라진다. 그래서 리랭킹 효과도 개선 폭이 아니라 방향만 결론으로 삼았다.
 
 **채점자 독립성 미확보** — `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`은 Gemini가 채점한다. 답변을 만든 모델과 채점하는 모델이 같아서, 자기가 만든 답변에 후한 점수를 줄 가능성을 배제하지 못한다.
+
+**응답 지연 미분석** — EC2 환경에서 IT 개념 질문 1건에 22.5초가 걸렸다. 다만 검색과 생성 중 어느 단계가 지연의 주원인인지는 아직 계측하지 않았고, 이전 시점의 측정치도 없어 비교 기준이 없다. 단계별 계측은 스트리밍 작업과 함께 진행할 예정이다.
 
 **쿼리 익스팬션 미측정** — 질문을 여러 표현으로 바꿔 검색 범위를 넓히는 코드가 `retriever.py`에 구현돼 있지만, 기본값이 꺼짐이라 실제로 쓰인 적이 없고 효과도 검증하지 않았다.
 
@@ -366,15 +404,19 @@ POST /ask
 **뉴스 원문 미확보** — 네이버 뉴스 API가 주는 제목과 짧은 요약만 사용한다. 기사 원문은 언론사별로 접근 가능 여부가 달라 확보하지 못했다.
 
 ---
+
 ## 스트레치 골
 
 - [x] Reranking 도입 및 효과 측정 (v1/v1-new/v2 변수 분리 비교 완료)
 - [x] 검색 커버리지 확대 (시드 30 → 59개, 문서 258 → 431개)
 - [x] Docker 컨테이너화 및 AWS EC2 배포
 - [x] GitHub Actions CI/CD 파이프라인 구축
+- [x] 의존성 관리 uv 전환 (`pyproject.toml` + `uv.lock`, Python 3.11 고정)
+- [x] Elastic IP 연결로 배포 주소 고정
+- [x] 응답에 추적 정보 노출 (`tool_query`, `trace`, `contexts`)
 - [ ] 스트리밍 응답 (`graph.stream()` + `StreamingResponse`)
 - [ ] Query Expansion 효과 측정 (코드는 구현돼 있으나 아직 미측정)
-- [ ] 평가 문항 확대 (3 → 10~20문항)
+- [ ] 평가 문항 확대 (3 → 10~20문항, 뉴스 경로 채점 기준 포함)
 - [ ] 에러 종류별 메시지 세분화 (API 실패와 서버 다운 구분)
 - [ ] 뉴스 원문 크롤링 (언론사 자체 사이트 대상, 네이버 호스팅 페이지는 접근 제한)
 - [ ] 대화 기억 영구 저장 (`SqliteSaver` 등)
@@ -444,7 +486,7 @@ IT 인덱스에 분명히 있는 "인공지능" 문서조차 0건으로 검색�
 <details>
 <summary><b>EC2에서 컨테이너가 무한 재시작</b></summary>
 
-`ModuleNotFoundError: sentence-transformers`가 반복됐다. `requirements.txt`에는 있었지만 Docker Hub에 올라간 이미지가 그 변경 이전 버전이었다. `docker build --no-cache --platform linux/amd64`로 재빌드해 push한 뒤 EC2에서 다시 받아 해결했다.
+`ModuleNotFoundError: sentence-transformers`가 반복됐다. 의존성 목록에는 있었지만 Docker Hub에 올라간 이미지가 그 변경 이전 버전이었다. `docker build --no-cache --platform linux/amd64`로 재빌드해 push한 뒤 EC2에서 다시 받아 해결했다.
 
 디버깅 중에는 `restart: unless-stopped` 때문에 로그가 계속 밀려서, 원인을 찾는 동안에는 `restart: "no"`로 두고 확인했다.
 
@@ -462,7 +504,7 @@ Workflow permissions의 "Read and write"가 조직 정책으로 잠겨 선택할
 
 `ssh: no key found` 오류가 났다. `EC2_SSH_KEY` 시크릿에 pem 파일 내용이 온전히 들어가지 않은 것이 원인이었다. `BEGIN` / `END` 라인을 포함해 전체를 정확히 다시 등록해서 해결했다.
 
-또한 EC2를 중지 후 재시작하면 퍼블릭 IP가 매번 바뀌므로, `EC2_HOST` 시크릿을 갱신하지 않으면 배포 단계에서 `dial tcp ***:22: i/o timeout`이 발생한다. 고정 IP를 붙이지 않는 한 재시작마다 갱신이 필요하다.
+이와 별개로, EC2를 중지 후 재시작하면 퍼블릭 IP가 매번 바뀌어 `EC2_HOST` 시크릿을 갱신하지 않으면 배포 단계에서 `dial tcp ***:22: i/o timeout`이 발생했다. Elastic IP를 할당해 인스턴스에 연결하면서 해결했다. 재시작해도 주소가 유지되므로 시크릿을 다시 손댈 필요가 없고, 배포 주소도 고정됐다.
 
 </details>
 
@@ -489,13 +531,15 @@ EC2에서 컨테이너가 계속 재시작하며 `could not open /app/data/faiss
 </details>
 
 <details>
-<summary><b>인덱스를 커밋했는데도 같은 오류가 반복됨</b></summary>
+<summary><b>EC2 디스크 부족으로 배포가 조용히 실패 (2회 발생)</b></summary>
 
-저장소에는 파일이 정상적으로 올라가 있었고, EC2 컨테이너도 최신 이미지 ID를 쓰고 있었다. 그런데 컨테이너 안에는 여전히 인덱스가 없었다.
+인덱스를 커밋한 뒤에도 같은 오류가 반복됐다. 저장소에는 파일이 정상적으로 올라가 있었고 EC2 컨테이너도 최신 이미지 ID를 쓰고 있었는데, 컨테이너 안에는 여전히 인덱스가 없었다.
 
 `docker compose pull` 로그를 끝까지 읽어보니 `no space left on device`가 찍혀 있었다. EC2 디스크가 90% 차서 새 이미지(3.42GB)의 레이어 압축 해제가 실패했고, 그 상태로 `up -d`를 실행하니 기존 이미지 그대로 컨테이너가 다시 뜨고 있었다. `docker image prune`으로 사용하지 않는 이미지 3.7GB를 정리(90% → 51%)한 뒤 재배포해서 해결했다.
 
-배포가 성공했다는 신호(Actions 초록 체크)와 실제 반영은 별개라는 걸 확인한 사례다.
+같은 문제가 이후 한 번 더 발생했다. 수동 정리는 증상만 없앤 조치였고, 배포마다 이전 이미지가 EC2에 그대로 쌓이는 구조가 원인이었다. `deploy.yml`의 배포 단계 마지막에 `sudo docker image prune -af`를 넣어, 새 컨테이너가 뜬 뒤 사용하지 않는 이미지를 자동으로 지우도록 바꿨다.
+
+배포가 성공했다는 신호(Actions 초록 체크)와 실제 반영은 별개라는 걸 확인한 사례다. Actions는 SSH 명령이 종료 코드 0으로 끝나기만 하면 성공으로 표시한다.
 
 </details>
 
@@ -565,6 +609,26 @@ EC2에서 컨테이너가 계속 재시작하며 `could not open /app/data/faiss
 채점 실패를 의심했지만 `faithfulness`가 1.0이었고 파싱 실패 경고도 없었으므로 그 가설은 기각됐다. 저장된 답변 원문을 직접 비교하자 원인이 드러났다. 리랭킹 없이 생성된 답변은 정의를 한 번도 말하지 않고 LISP·DARPA·AI 겨울 같은 연구사만 서술하고 있었다. "무엇인가"를 물었는데 역사를 답한 것이므로 0.0은 타당한 채점이었다.
 
 진단 스크립트 자체의 한계도 확인했다. 스크립트는 원본 질문을 그대로 검색기에 넣지만, 실제 파이프라인은 에이전트가 생성한 검색어를 도구에 넘긴다. 평가 결과에 검색된 컨텍스트를 함께 저장하도록 바꿔, 다음부터는 답변과 근거를 같이 볼 수 있게 했다.
+
+</details>
+
+<details>
+<summary><b>Python 3.14에서는 uv sync가 통과하지 못했다</b></summary>
+
+`requirements.txt`를 `pyproject.toml` + `uv.lock`으로 옮기면서 처음에는 최신 버전인 3.14를 지정했다. `uv sync`가 torch 설치 단계에서 실패했다. torch 2.8.0에는 cp314용 wheel이 배포되지 않아 설치가 소스 빌드로 넘어가면서 막힌 것이었다.
+
+버전을 3.11로 내려 고정했다(`.python-version`, `requires-python = ">=3.11,<3.12"`). 최신 버전이 항상 선택지가 되는 것은 아니고, 의존 패키지가 그 버전용 wheel을 배포했는지가 실제 상한이라는 것을 확인했다.
+
+CPU 전용 torch는 `pyproject.toml`의 `[[tool.uv.index]]`와 `[tool.uv.sources]`로 별도 인덱스를 지정해 받는다. 기본 인덱스에서 받으면 CUDA 관련 의존성이 함께 딸려와 이미지 용량이 불필요하게 커진다.
+
+</details>
+
+<details>
+<summary><b>dockerignore 파일이 동작하지 않고 있었다</b></summary>
+
+빌드 컨텍스트에서 제외되고 있다고 생각한 파일들이 계속 이미지에 포함되고 있었다. 파일 이름이 `dockerignore`로 돼 있었던 것이 원인이다. Docker는 앞에 점이 붙은 `.dockerignore`만 인식한다.
+
+이름을 고치면서 `.venv/`도 목록에 추가했다. uv 전환으로 로컬에 가상환경 디렉터리가 생겼는데, 제외하지 않으면 이미지에 통째로 복사된다.
 
 </details>
 
@@ -719,4 +783,3 @@ v1-new와 v2는 2회씩 측정했고 두 회차를 함께 적었다. 라우팅 �
 
 기능을 하나 넣으면 다른 게 망가진다는 것도 확인했다. 폴백을 위해 시스템 프롬프트를 넣자 잡담 응답이 사라졌고, 링크를 예쁘게 만들자 요약이 사라졌으며, 그걸 고치자 목록 형태가 깨졌다. 프롬프트는 코드처럼 한 번 짜두면 유지되는 게 아니라, 조건을 추가할 때마다 기존 동작을 다시 확인해야 하는 대상이었다.
 
-</details>
