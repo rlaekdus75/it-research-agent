@@ -1,0 +1,34 @@
+[project]
+name = "rain-research-bot"
+version = "0.1.0"
+description = "IT 개념 질문과 실시간 뉴스를 구분해 답하는 LangGraph 리서치 에이전트"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "langchain-core",
+    "langchain-community",
+    "langchain-huggingface",
+    "langchain-google-genai",
+    "langgraph",
+    "faiss-cpu",
+    "rank-bm25",
+    "konlpy",
+    "mecab-python3",
+    "sentence-transformers",
+    "torch==2.8.0",
+    "requests",
+    "python-dotenv",
+    "wikipedia-api==0.6.0",
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+]
+
+# GPU가 없는 환경이라 CUDA 포함 torch는 이미지 용량만 키운다.
+# torch만 PyTorch의 CPU 전용 저장소에서 받도록 지정한다.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]

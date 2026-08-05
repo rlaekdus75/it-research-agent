@@ -6,6 +6,9 @@
 
 FROM python:3.11-slim
 
+# ---- uv 설치 (공식 이미지에서 실행 파일만 가져온다) ----
+COPY --from=ghcr.io/astral-sh/uv:0.12.1 /uv /uvx /bin/
+
 # ---- 시스템 패키지 + mecab-ko 빌드 도구 ----
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -45,12 +48,12 @@ ENV MECAB_DICPATH=/usr/local/lib/mecab/dic/mecab-ko-dic
 WORKDIR /app
 
 # ---- 파이썬 의존성 설치 (코드보다 먼저 복사해서 캐시 활용) ----
-COPY requirements.txt .
-# GPU가 없는 컨테이너라 CUDA 포함 torch(nvidia-*-cu12 등)는 불필요하게 이미지 용량만 키운다.
-# sentence-transformers가 요구하는 torch를 CPU 전용 빌드로 먼저 깔아서, 이후 설치 단계에서
-# 이미 만족된 의존성으로 인식해 CUDA 버전으로 덮어쓰지 않도록 한다.
-RUN pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir -r requirements.txt
+# uv.lock에 고정된 버전 그대로 설치한다. CPU 전용 torch 설정도 pyproject.toml에 있다.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-install-project
+
+# uv가 만든 가상환경을 기본 파이썬으로 쓴다
+ENV PATH="/app/.venv/bin:$PATH"
 
 # ---- 애플리케이션 코드 + 데이터 복사 ----
 COPY src/ ./src/
