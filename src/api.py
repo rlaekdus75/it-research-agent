@@ -31,6 +31,7 @@ class AskResponse(BaseModel):
     tool_query: Optional[str] = None
     trace: list[str] = []
     contexts: list[str] = []
+    
 
 @app.get("/")
 def serve_ui():
