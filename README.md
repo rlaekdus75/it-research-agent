@@ -302,8 +302,6 @@ USE_RERANKER=false uv run python evaluation/run_evaluation.py
 
 ## 데모
 
-배포된 서비스: http://52.79.205.142:8003
-
 **IT 개념 질문 — 위키 인덱스 검색**
 
 ```
