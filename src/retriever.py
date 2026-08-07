@@ -11,6 +11,7 @@ retriever.py - 하이브리드 검색기 (FAISS + BM25/Mecab) + Reranking + Quer
   use_reranker=False, use_query_expansion=False -> v1 (baseline)
   use_reranker=True,  use_query_expansion=False -> v2 (reranking only)
   use_reranker=True,  use_query_expansion=True  -> v3 (reranking + query expansion)
+  
 """
 import logging
 import warnings
@@ -61,6 +62,7 @@ def load_hybrid_retriever(
     relaxed_bm25_min_score=6.0,
     use_reranker=True,
     use_query_expansion=False,   # v3: 쿼리 익스팬션 on/off
+    min_chunk_chars=80,          # 이보다 짧은 청크는 근거로 쓰지 않음
 ):
     """
     FAISS + BM25 하이브리드 검색 + Cross-encoder 리랭킹.
@@ -181,12 +183,14 @@ JSON 배열로만 답하세요 (다른 텍스트 없이):
                     seen_ids.add(doc_id)
                     all_results.append(doc)
 
+        # ---- 근거가 될 수 없는 초단문 청크 제외 ----
+        all_results = [d for d in all_results if len(d.page_content) >= min_chunk_chars]
+
         # ---- 리랭킹 ----
         if use_reranker and all_results:
             all_results = _rerank(question, all_results)  # 원본 질문 기준으로 재채점
 
         return all_results[:k]
-
     return RunnableLambda(retrieve)
 
 
