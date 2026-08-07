@@ -19,15 +19,26 @@ _USE_RERANKER = os.getenv("USE_RERANKER", "true").lower() != "false"
 _it_retriever = load_hybrid_retriever(_FAISS_PATH, use_reranker=_USE_RERANKER)
 
 
+def _format_news(results: list) -> str:
+    return "\n\n".join(
+        f"제목: {r['title']}\n요약: {r['description']}\n링크: {r['link']}"
+        for r in results
+    )
+
+
 @tool
 def search_it_wiki(query: str) -> str:
     """IT 개념이나 배경지식을 설명하는 위키 문서를 검색합니다.
     '인공지능이 뭐야?', 'HTTP란?', '블록체인 원리' 처럼
     시간이 지나도 안 바뀌는 정의/개념 질문에 사용합니다."""
     docs = _it_retriever.invoke(query)
-    if not docs:
-        return "관련 문서를 찾지 못했습니다."
-    return "\n\n".join(d.page_content for d in docs)
+    if docs:
+        return "\n\n".join(d.page_content for d in docs)
+
+    results = search_news(query)
+    if not results:
+        return "위키 인덱스와 뉴스 검색 모두에서 결과를 찾지 못했습니다."
+    return "위키 인덱스에 문서가 없어 최신 뉴스로 대체합니다.\n\n" + _format_news(results)
 
 
 @tool
@@ -38,7 +49,4 @@ def search_realtime_news(query: str) -> str:
     results = search_news(query)
     if not results:
         return "관련 뉴스를 찾지 못했습니다."
-    return "\n\n".join(
-        f"제목: {r['title']}\n요약: {r['description']}\n링크: {r['link']}"
-        for r in results
-    )
+    return _format_news(results)
